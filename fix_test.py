@@ -2,17 +2,17 @@ import unittest
 import parameterized
 from fix_guards import fix
 
-TEST_FILE_CONTENTS = ("""#ifndef FOO_H_
-#define FOO_H_
+TEST_FILE_CONTENTS_MALFORMED_1 = ("""#ifndef BAR_H_
+#define BAR_H_
 
 some
 file
 contents
 
-#endif  // FOO_H_
+#endif//BAR_H_
 """)
 
-TEST_FILE_CONTENTS_MALFORMED_1 = ("""#ifndef FOO_H_
+EXPECTED_TEST_FILE_CONTENTS_1 = ("""#ifndef FOO_H_
 #define FOO_H_
 
 some
@@ -22,7 +22,17 @@ contents
 #endif//FOO_H_
 """)
 
-TEST_FILE_CONTENTS_MALFORMED_2 = ("""#ifndef FOO_H_
+TEST_FILE_CONTENTS_MALFORMED_2 = ("""#ifndef BAR_H_
+#define BAR_H_
+
+some
+file
+contents
+
+#endif
+""")
+
+EXPECTED_TEST_FILE_CONTENTS_2 = ("""#ifndef FOO_H_
 #define FOO_H_
 
 some
@@ -32,10 +42,19 @@ contents
 #endif
 """)
 
-TEST_FILE_CONTENTS_MALFORMED_3 = ("""
+TEST_FILE_CONTENTS_MALFORMED_3 = ("""some
+file
+contents
+""")
+
+EXPECTED_TEST_FILE_CONTENTS_3 = ("""#ifndef FOO_H_
+#define FOO_H_
+
 some
 file
 contents
+
+#endif  // FOO_H_
 """)
 
 TEST_FILE_CONTENTS_MALFORMED_4 = ("""#ifndef SOME_OTHER_TEST
@@ -81,9 +100,12 @@ class TestFix(unittest.TestCase):
             fix.format_guard("a/b/c", "d/e/f")
 
     @parameterized.parameterized.expand([
-        (TEST_FILE_CONTENTS_MALFORMED_1, "FOO_H_", TEST_FILE_CONTENTS),
-        (TEST_FILE_CONTENTS_MALFORMED_2, "FOO_H_", TEST_FILE_CONTENTS),
-        (TEST_FILE_CONTENTS_MALFORMED_3, "FOO_H_", TEST_FILE_CONTENTS),
+        (TEST_FILE_CONTENTS_MALFORMED_1, "FOO_H_",
+         EXPECTED_TEST_FILE_CONTENTS_1),
+        (TEST_FILE_CONTENTS_MALFORMED_2, "FOO_H_",
+         EXPECTED_TEST_FILE_CONTENTS_2),
+        (TEST_FILE_CONTENTS_MALFORMED_3, "FOO_H_",
+         EXPECTED_TEST_FILE_CONTENTS_3),
         (TEST_FILE_CONTENTS_MALFORMED_4, "FOO_H_",
          EXPECTED_TEST_FILE_CONTENTS_4),
     ])

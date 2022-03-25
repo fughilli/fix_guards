@@ -1,14 +1,13 @@
 import os
 import sys
 import re
+from collections import defaultdict
 from typing import List, Optional
 
 from absl import flags
 
-_PATH = flags.DEFINE_string(
-    "path", None,
-    "Path to find headers in. Also used as the root path to normalize guards "
-    "against.")
+_PATH = flags.DEFINE_string("path", None, "Path to header.")
+_ROOT = flags.DEFINE_string("root", None, "Root path to normalize against.")
 
 
 def format_guard(header_path: str, root_path: str) -> str:
@@ -22,6 +21,7 @@ def format_guard(header_path: str, root_path: str) -> str:
       A screaming snake case string with a trailing underscore containing the
       truncated header path components.
     """
+    print(header_path, root_path)
     if os.path.commonpath([header_path, root_path]) != root_path:
         raise ValueError("Header path does not include root path")
 
@@ -32,92 +32,40 @@ def format_guard(header_path: str, root_path: str) -> str:
     return stripped
 
 
-def get_headers(root_dir: str) -> List[str]:
-    header_re = re.compile(r'.*\.h$')
-    files: List[str] = []
-    for file in os.listdir(root_dir):
-        print(file)
-        if os.path.isdir(file):
-            files.extend(get_headers(file))
-        elif header_re.fullmatch(file):
-            files.append(file)
-    return files
+def format_file(contents: str, guard: str) -> str:
+    return (f'#ifndef {guard:s}\n#define {guard:s}\n\n{contents:s}\n'
+            f'#endif  // {guard:s}\n')
 
 
 def fix_file(contents: str, guard: str) -> str:
-    state = 0
-
-    ifndef_re = re.compile(r'^\s*#ifndef (?P<expression>[^\s]*)\s*$')
-    define_re = re.compile(r'^\s*#define (?P<expression>[^\s]*)\s*$')
+    ifndef_re = re.compile(r'^\s*#ifndef\s+(?P<expression>[^\s]*)\s*$')
+    define_re = re.compile(r'^\s*#define\s+(?P<expression>[^\s]*)\s*$')
     endif_re = re.compile(r'^\s*#endif(\s*\/\/\s*(?P<expression>[^\s]*))?\s*$')
 
-    before_guard: List[str] = []
-    between_guard: List[str] = []
-    after_guard: List[str] = []
-
-    expression: Optional[str] = None
+    symbols = defaultdict(lambda: 0)
 
     for line in contents.split('\n'):
-        if state == 0:
-            m = ifndef_re.match(line)
-            if not m:
-                before_guard.append(line)
-                continue
-            expression = m.groupdict()['expression']
-            state = 1
-            continue
+        for r in [ifndef_re, define_re, endif_re]:
+            m = r.match(line)
+            if m and m.groupdict()['expression']:
+                symbols[m.groupdict()['expression']] += 1
 
-        if state == 1:
-            m = define_re.match(line)
-            if not m:
-                return contents
-            if expression != m.groupdict()['expression']:
-                return contents
-            state = 2
-            continue
+    if not symbols:
+        return format_file(contents, guard)
 
-        if state == 2:
-            m = endif_re.match(line)
-            if not m:
-                between_guard.append(line)
-                continue
-            endif_expression = m.groupdict()['expression']
-            if endif_expression and endif_expression != expression:
-                return contents
-            state = 3
-            continue
+    max_symbol_pair = (sorted(symbols.items(), key=(lambda x: x[1]))[-1])
 
-        if state == 3:
-            after_guard.append(line)
-            continue
+    if max_symbol_pair[1] < 2:
+        return format_file(contents, guard)
 
-    if 0 < state and state < 3:
-        return contents
-
-    before = '\n'.join(before_guard).strip()
-    if before:
-        before = before + '\n'
-
-    between = '\n'.join(between_guard).strip()
-
-    after = '\n'.join(after_guard).strip()
-    if after:
-        after = '\n' + after
-
-    print(before, between, after)
-
-    if state > 0:
-      return (
-          f'{before:s}#ifndef {guard:s}\n#define {guard:s}\n\n{between:s}\n\n#endif  // {guard:s}{after:s}\n'
-      )
-
-    return (
-        f'#ifndef {guard:s}\n#define {guard:s}\n\n{before:s}\n\n#endif  // {guard:s}\n'
-    )
+    return re.sub(max_symbol_pair[0], guard, contents)
 
 
 def main():
-    headers = get_headers(_PATH.value)
+    header = _PATH.value
+    contents = open(header).read()
+    open(header, 'w').write(
+        fix_file(contents, format_guard(header, _ROOT.value)))
 
 
 if __name__ == '__main__':
