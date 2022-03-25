@@ -7,6 +7,8 @@ from typing import List, Optional
 from absl import flags
 
 _PATH = flags.DEFINE_string("path", None, "Path to header.")
+_PATH_LIST = flags.DEFINE_spaceseplist(
+    "paths", None, "Space-separated list of header file paths.")
 _ROOT = flags.DEFINE_string("root", None, "Root path to normalize against.")
 
 
@@ -66,14 +68,23 @@ def fix_file(contents: str, guard: str) -> str:
     return re.sub(first_ifndef_symbol, guard, contents)
 
 
+def fix_file_in_place(file_path: str, root: str):
+    contents = open(file_path).read()
+    open(file_path,
+         'w').write(fix_file(contents, format_guard(file_path, root)))
+
+
 def main():
-    header = _PATH.value
-    contents = open(header).read()
-    open(header,
-         'w').write(fix_file(contents, format_guard(header, _ROOT.value)))
+    if _PATH.value:
+        fix_file_in_place(_PATH.value, _ROOT.value)
+
+    if _PATH_LIST.value:
+        for path in _PATH_LIST.value:
+            fix_file_in_place(path, _ROOT.value)
 
 
 if __name__ == '__main__':
-    flags.mark_flag_as_required(_PATH.name)
+    flags.mark_flags_as_mutual_exclusive(['path', 'paths'], required=True)
+    flags.mark_flag_as_required('root')
     flags.FLAGS(sys.argv)
     main()
