@@ -42,30 +42,35 @@ def fix_file(contents: str, guard: str) -> str:
     define_re = re.compile(r'^\s*#define\s+(?P<expression>[^\s]*)\s*$')
     endif_re = re.compile(r'^\s*#endif(\s*\/\/\s*(?P<expression>[^\s]*))?\s*$')
 
-    symbols = defaultdict(lambda: 0)
+    lines = contents.split('\n')
 
-    for line in contents.split('\n'):
-        for r in [ifndef_re, define_re, endif_re]:
-            m = r.match(line)
-            if m and m.groupdict()['expression']:
-                symbols[m.groupdict()['expression']] += 1
+    first_ifndef_symbol = None
+    line_after_ifndef = None
+    for line in lines:
+        if first_ifndef_symbol:
+            line_after_ifndef = line
+            break
 
-    if not symbols:
+        m = ifndef_re.match(line)
+        if not m:
+            continue
+        first_ifndef_symbol = m.groupdict()['expression']
+
+    if not first_ifndef_symbol:
         return format_file(contents, guard)
 
-    max_symbol_pair = (sorted(symbols.items(), key=(lambda x: x[1]))[-1])
-
-    if max_symbol_pair[1] < 2:
+    m = define_re.match(line_after_ifndef)
+    if not m or not m.groupdict()['expression'] == first_ifndef_symbol:
         return format_file(contents, guard)
 
-    return re.sub(max_symbol_pair[0], guard, contents)
+    return re.sub(first_ifndef_symbol, guard, contents)
 
 
 def main():
     header = _PATH.value
     contents = open(header).read()
-    open(header, 'w').write(
-        fix_file(contents, format_guard(header, _ROOT.value)))
+    open(header,
+         'w').write(fix_file(contents, format_guard(header, _ROOT.value)))
 
 
 if __name__ == '__main__':
